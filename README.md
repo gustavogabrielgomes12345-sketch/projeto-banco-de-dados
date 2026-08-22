@@ -2,14 +2,14 @@
 # Projeto Banco de Dados
 
 ## Descrição do Projeto
-[Descreva aqui em 2 ou 3 frases o tema do sistema, ex: Sistema de gestão de vendas para uma loja de eletrônicos.]
+Um Banco de Dados para uma oficina mecânica
 
 ## Objetivo da Solução
-[Explique qual problema o banco de dados vai resolver, ex: Otimizar o controle de estoque e cadastros de clientes.]
+Otimizar o controle de estoque, realizar o cadastro das peças, dos serviços e cadastros de clientes.
 
 ## Integrantes da Equipe
-* **[Gustavo Gabriel]** - GitHub: [@usuario1](https://github.com/gustavogabrielgomes12345)
-* **[João Victor]** - GitHub: [@usuario2](https://github.com/PedroHenriquereis19)
+* **[Gustavo Gabriel]** - GitHub: [@usuario1](https://github.com/gustavogabrielgomes12345-sketch)
+* **[João Victor]** - GitHub: [@usuario2](https://github.com/yasukevitu)
 * **[Pedro Henrique]** - GitHub: [@usuario3](https://github.com/vitu)
 
 ## Estrutura do Repositório
