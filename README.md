@@ -10,7 +10,8 @@ Otimizar o controle de estoque, realizar o cadastro das peças, dos serviços e 
 ## Integrantes da Equipe
 * **[Gustavo Gabriel]** - GitHub: [@usuario1](https://github.com/gustavogabrielgomes12345-sketch)
 * **[João Victor]** - GitHub: [@usuario2](https://github.com/yasukevitu)
-* **[Pedro Henrique]** - GitHub: [@usuario3](https://github.com/vitu)
+* **[Pedro Henrique]** - GitHub: [@usuario3](https://github.com/PedroHenriquereis19)
+* **[Lucas Matheus]** - GitHub: [@usuario4](https://github.com/lucas090-a)
 
 ## Estrutura do Repositório
 * `/ddl/`: Scripts de definição de dados (CRIAÇÃO de tabelas).
