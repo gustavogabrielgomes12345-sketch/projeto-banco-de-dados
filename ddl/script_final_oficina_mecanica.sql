@@ -1,8 +1,3 @@
--- script final do banco de dados da oficina mecanica
--- corrigido apos a correcao em sala: faltava a FK em tudo, faltava
--- unique no cpf/cnpj/placa, faltava check no status e no tipo de
--- movimentacao, e a tabela ordens_servico_pecas tinha ficado sem o
--- create table no arquivo antigo
 
 -- 1) apagar as tabelas (filha antes da mae, senao da erro de FK)
 DROP TABLE IF EXISTS pagamentos;
