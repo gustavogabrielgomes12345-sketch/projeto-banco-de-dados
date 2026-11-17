@@ -1,15 +1,8 @@
 -- ============================================================================
--- DEFINIÇÃO DE ESTRUTURA (DDL)
+-- 1. DEFINIÇÃO DE ESTRUTURA (DDL) E ALTERAÇÕES - OFICINA MECÂNICA
 -- ============================================================================
 
--- ============================================================================
--- CORREÇÃO FEITA PELO QUE FOI SOLICITADO EM AULA:
--- Padrão de Chave Primária: 'id' em todas as tabelas.
--- Ordem de criação estruturada respeitando as dependências de dados.
--- Manter todos os comandos no mesmo arquivo porém separados com comentários explicativos.
--- ============================================================================
-
--- 1. Tabela de Clientes (Pessoas físicas ou jurídicas)
+-- Tabelas Principais (Estrutura Base)
 CREATE TABLE clientes (
     id              INT PRIMARY KEY,              
     nome            VARCHAR(150) NOT NULL,        
@@ -21,7 +14,6 @@ CREATE TABLE clientes (
     ativo           BOOLEAN NOT NULL DEFAULT TRUE 
 );
 
--- 2. Tabela de Veículos (Veículos associados a cada cliente)
 CREATE TABLE veiculos (
     id              INT PRIMARY KEY,              
     placa           VARCHAR(10) NOT NULL,        
@@ -34,13 +26,11 @@ CREATE TABLE veiculos (
     cliente_id      INT NOT NULL                  
 );
 
--- 3. Tabela de Tipos de Funcionário (Cargos e Funções)
 CREATE TABLE tipos_funcionario (
     id              INT PRIMARY KEY,              
     descricao       VARCHAR(50) NOT NULL          
 );
 
--- 4. Tabela de Funcionários (Equipe interna da oficina)
 CREATE TABLE funcionarios (
     id                  INT PRIMARY KEY,              
     nome                VARCHAR(150) NOT NULL,        
@@ -52,7 +42,6 @@ CREATE TABLE funcionarios (
     tipo_funcionario_id INT NOT NULL                  
 );
 
--- 5. Tabela de Fornecedores (Empresas parceiras que fornecem autopeças)
 CREATE TABLE fornecedores (
     id              INT PRIMARY KEY,              
     razao_social    VARCHAR(150) NOT NULL,        
@@ -62,13 +51,11 @@ CREATE TABLE fornecedores (
     endereco        VARCHAR(200)                  
 );
 
--- 6. Tabela de Categorias de Peça (Classificação técnica)
 CREATE TABLE categorias_peca (
     id              INT PRIMARY KEY,              
     descricao       VARCHAR(80) NOT NULL          
 );
 
--- 7. Tabela de Peças (Catálogo de autopeças e insumos)
 CREATE TABLE pecas (
     id                  INT PRIMARY KEY,          
     nome                VARCHAR(150) NOT NULL,    
@@ -80,7 +67,6 @@ CREATE TABLE pecas (
     fornecedor_id       INT NOT NULL              
 );
 
--- 8. Tabela de Estoques (Posição atual de saldos)
 CREATE TABLE estoques (
     id                  INT PRIMARY KEY,          
     peca_id             INT NOT NULL,             
@@ -90,7 +76,6 @@ CREATE TABLE estoques (
     data_atualizacao    DATE                      
 );
 
--- 9. Tabela de Movimentações de Estoque (Histórico de entradas e saídas)
 CREATE TABLE movimentacoes_estoque (
     id                      INT PRIMARY KEY,      
     peca_id                 INT NOT NULL,         
@@ -100,7 +85,6 @@ CREATE TABLE movimentacoes_estoque (
     observacao              VARCHAR(255)          
 );
 
--- 10. Tabela de Serviços (Catálogo de mão de obra)
 CREATE TABLE servicos (
     id                  INT PRIMARY KEY,          
     nome                VARCHAR(150) NOT NULL,    
@@ -109,7 +93,6 @@ CREATE TABLE servicos (
     tempo_estimado_min  INT                       
 );
 
--- 11. Tabela de Ordens de Serviço (Cabeçalho da OS)
 CREATE TABLE ordens_servico (
     id                  INT PRIMARY KEY,          
     cliente_id          INT NOT NULL,             
@@ -123,7 +106,6 @@ CREATE TABLE ordens_servico (
     observacoes         VARCHAR(255)              
 );
 
--- 12. Tabela Associativa de Peças da OS
 CREATE TABLE ordens_servico_pecas (
     id                  INT PRIMARY KEY,          
     ordem_servico_id    INT NOT NULL,             
@@ -132,7 +114,6 @@ CREATE TABLE ordens_servico_pecas (
     preco_unitario      DECIMAL(10,2) NOT NULL    
 );
 
--- 13. Tabela Associativa de Serviços da OS
 CREATE TABLE ordens_servico_servicos (
     id                  INT PRIMARY KEY,          
     ordem_servico_id    INT NOT NULL,             
@@ -142,13 +123,11 @@ CREATE TABLE ordens_servico_servicos (
     desconto_concedido  DECIMAL(10,2) DEFAULT 0   
 );
 
--- 14. Tabela de Formas de Pagamento
 CREATE TABLE formas_pagamento (
     id              INT PRIMARY KEY,              
     descricao       VARCHAR(30) NOT NULL          
 );
 
--- 15. Tabela de Pagamentos Recebidos
 CREATE TABLE pagamentos (
     id                  INT PRIMARY KEY,          
     ordem_servico_id    INT NOT NULL,             
@@ -156,4 +135,44 @@ CREATE TABLE pagamentos (
     valor               DECIMAL(10,2) NOT NULL,   
     data_pagamento      TIMESTAMP NOT NULL,       
     parcelas            INT NOT NULL DEFAULT 1    
+);
+
+-- ============================================================================
+-- ALTERAÇÕES E NOVAS TABELAS (Demandadas por PSM e Triggers)
+-- ============================================================================
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS atendente_id INT;
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS valor_pecas DECIMAL(10,2) NOT NULL DEFAULT 0;
+ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS valor_mao_obra DECIMAL(10,2) NOT NULL DEFAULT 0;
+
+ALTER TABLE estoques ADD COLUMN IF NOT EXISTS quantidade_reservada INT NOT NULL DEFAULT 0;
+
+ALTER TABLE movimentacoes_estoque ADD COLUMN IF NOT EXISTS fornecedor_id INT;
+ALTER TABLE movimentacoes_estoque ADD COLUMN IF NOT EXISTS nota_fiscal VARCHAR(30);
+ALTER TABLE movimentacoes_estoque ADD COLUMN IF NOT EXISTS preco_unitario DECIMAL(10,2);
+
+ALTER TABLE pagamentos ADD COLUMN IF NOT EXISTS valor_juros DECIMAL(10,2) NOT NULL DEFAULT 0;
+ALTER TABLE pagamentos ADD COLUMN IF NOT EXISTS valor_desconto DECIMAL(10,2) NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS cobrancas (
+    id                  INT PRIMARY KEY,
+    ordem_servico_id    INT NOT NULL,
+    valor               DECIMAL(10,2) NOT NULL,
+    data_emissao        DATE NOT NULL,
+    data_vencimento     DATE NOT NULL,
+    status              VARCHAR(20) NOT NULL DEFAULT 'PENDENTE'
+);
+
+CREATE TABLE IF NOT EXISTS categorias_servico (
+    id                  INT PRIMARY KEY,
+    descricao           VARCHAR(80) NOT NULL
+);
+ALTER TABLE servicos ADD COLUMN IF NOT EXISTS categoria_servico_id INT;
+
+CREATE TABLE IF NOT EXISTS log_preco_pecas (
+    id                  INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    peca_id             INT NOT NULL,
+    preco_antigo        DECIMAL(10,2) NOT NULL,
+    preco_novo          DECIMAL(10,2) NOT NULL,
+    data_alteracao      TIMESTAMP NOT NULL DEFAULT CURRENT_USER,
+    usuario             VARCHAR(100) NOT NULL DEFAULT CURRENT_USER
 );
