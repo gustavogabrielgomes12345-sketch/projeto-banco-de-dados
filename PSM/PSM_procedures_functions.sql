@@ -1,65 +1,10 @@
 -- ============================================================================
--- PROCEDURES E FUNCTIONS - OFICINA MECANICA
--- PostgreSQL. Rodar depois do DDL e do DML.
+-- 3. PROCEDURES E FUNCTIONS (PSM) - OFICINA MECÂNICA
 -- ============================================================================
 
 -- ============================================================================
--- 0. ALTERACOES NA ESTRUTURA (precisamos de umas colunas a mais)
+-- 3.1 FUNCTIONS
 -- ============================================================================
-
--- atendente da OS e valores parciais
-ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS atendente_id INT;
-ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS valor_pecas DECIMAL(10,2) NOT NULL DEFAULT 0;
-ALTER TABLE ordens_servico ADD COLUMN IF NOT EXISTS valor_mao_obra DECIMAL(10,2) NOT NULL DEFAULT 0;
-
--- reserva de estoque (disponivel = quantidade_atual - quantidade_reservada)
-ALTER TABLE estoques ADD COLUMN IF NOT EXISTS quantidade_reservada INT NOT NULL DEFAULT 0;
-
--- dados da nota do fornecedor
-ALTER TABLE movimentacoes_estoque ADD COLUMN IF NOT EXISTS fornecedor_id INT;
-ALTER TABLE movimentacoes_estoque ADD COLUMN IF NOT EXISTS nota_fiscal VARCHAR(30);
-ALTER TABLE movimentacoes_estoque ADD COLUMN IF NOT EXISTS preco_unitario DECIMAL(10,2);
-
--- juros e desconto do pagamento
-ALTER TABLE pagamentos ADD COLUMN IF NOT EXISTS valor_juros DECIMAL(10,2) NOT NULL DEFAULT 0;
-ALTER TABLE pagamentos ADD COLUMN IF NOT EXISTS valor_desconto DECIMAL(10,2) NOT NULL DEFAULT 0;
-
--- cobranca gerada quando a OS e finalizada
-CREATE TABLE IF NOT EXISTS cobrancas (
-    id               INT PRIMARY KEY,
-    ordem_servico_id INT NOT NULL,
-    valor            DECIMAL(10,2) NOT NULL,
-    data_emissao     DATE NOT NULL,
-    data_vencimento  DATE NOT NULL,
-    status           VARCHAR(20) NOT NULL DEFAULT 'PENDENTE'
-);
-
--- categoria dos servicos (freios, motor...), usada na function de faturamento
-CREATE TABLE IF NOT EXISTS categorias_servico (
-    id        INT PRIMARY KEY,
-    descricao VARCHAR(80) NOT NULL
-);
-ALTER TABLE servicos ADD COLUMN IF NOT EXISTS categoria_servico_id INT;
-
-INSERT INTO categorias_servico (id, descricao) VALUES
-(1, 'Motor'),
-(2, 'Freios'),
-(3, 'Suspensão'),
-(4, 'Elétrica')
-ON CONFLICT (id) DO NOTHING;
-
-UPDATE servicos SET categoria_servico_id = 1 WHERE nome = 'Troca de Óleo';
-UPDATE servicos SET categoria_servico_id = 3 WHERE nome = 'Alinhamento e Balanceamento';
-UPDATE servicos SET categoria_servico_id = 2 WHERE nome = 'Revisão de Freios';
-UPDATE servicos SET categoria_servico_id = 4 WHERE nome = 'Troca de Bateria';
-
-
--- ============================================================================
--- 1. FUNCTIONS
--- ============================================================================
-
--- 1. fc_calcular_valor_total_os
--- soma das pecas (quantidade * preco) + mao de obra (valor_cobrado)
 CREATE OR REPLACE FUNCTION fc_calcular_valor_total_os(p_os_id INT)
 RETURNS NUMERIC
 LANGUAGE plpgsql
@@ -84,9 +29,6 @@ BEGIN
 END;
 $$;
 
-
--- 2. fc_total_gasto_cliente
--- total das OS concluidas do cliente (CONCLUIDA, FINALIZADA ou PAGA)
 CREATE OR REPLACE FUNCTION fc_total_gasto_cliente(p_cliente_id INT)
 RETURNS NUMERIC
 LANGUAGE plpgsql
@@ -107,9 +49,6 @@ BEGIN
 END;
 $$;
 
-
--- 3. fc_verificar_peca_estoque_critico
--- true se o disponivel (atual - reservado) for menor que o minimo
 CREATE OR REPLACE FUNCTION fc_verificar_peca_estoque_critico(p_peca_id INT)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -131,9 +70,6 @@ BEGIN
 END;
 $$;
 
-
--- 4. fc_produtividade_mensal_mecanico
--- retorna qtd de OS concluidas e total de mao de obra do mecanico no mes/ano
 CREATE OR REPLACE FUNCTION fc_produtividade_mensal_mecanico(p_funcionario_id INT, p_mes INT, p_ano INT)
 RETURNS TABLE (qtd_os_concluidas INT, valor_mao_obra NUMERIC)
 LANGUAGE plpgsql
@@ -168,9 +104,6 @@ BEGIN
 END;
 $$;
 
-
--- 5. fc_faturamento_por_categoria_servico
--- total faturado de uma categoria (ex: 'Freios') entre duas datas
 CREATE OR REPLACE FUNCTION fc_faturamento_por_categoria_servico(p_categoria VARCHAR, p_data_inicio DATE, p_data_fim DATE)
 RETURNS NUMERIC
 LANGUAGE plpgsql
@@ -205,12 +138,8 @@ $$;
 
 
 -- ============================================================================
--- 2. PROCEDURES
+-- 3.2 PROCEDURES (Versões ajustadas para funcionamento com Triggers)
 -- ============================================================================
-
--- 1. sp_abrir_ordem_servico
--- valida cliente, veiculo, mecanico e atendente e abre a OS como EM_ANALISE
--- o id da nova OS volta no ultimo parametro (passar NULL)
 CREATE OR REPLACE PROCEDURE sp_abrir_ordem_servico(
     p_cliente_id INT,
     p_veiculo_id INT,
@@ -256,9 +185,6 @@ BEGIN
 END;
 $$;
 
-
--- 2. sp_adicionar_peca_ordem_servico
--- confere o estoque disponivel, reserva a quantidade e atualiza o valor das pecas da OS
 CREATE OR REPLACE PROCEDURE sp_adicionar_peca_ordem_servico(
     p_os_id INT,
     p_peca_id INT,
@@ -298,13 +224,6 @@ BEGIN
         RAISE EXCEPTION 'Estoque insuficiente da peca % (disponivel: %, pedido: %)', p_peca_id, v_disponivel, p_quantidade;
     END IF;
 
-    -- reserva
-    UPDATE estoques
-    SET quantidade_reservada = quantidade_reservada + p_quantidade,
-        data_atualizacao = CURRENT_DATE
-    WHERE peca_id = p_peca_id;
-
-    -- se a peca ja esta na OS soma a quantidade, senao insere
     SELECT id INTO v_item_id FROM ordens_servico_pecas
     WHERE ordem_servico_id = p_os_id AND peca_id = p_peca_id;
 
@@ -316,7 +235,6 @@ BEGIN
         FROM ordens_servico_pecas;
     END IF;
 
-    -- valor parcial das pecas
     UPDATE ordens_servico
     SET valor_pecas = (SELECT COALESCE(SUM(quantidade * preco_unitario), 0)
                        FROM ordens_servico_pecas WHERE ordem_servico_id = p_os_id)
@@ -324,9 +242,6 @@ BEGIN
 END;
 $$;
 
-
--- 3. sp_finalizar_ordem_servico
--- da baixa definitiva no estoque, soma peca + mao de obra, muda o status e gera a cobranca
 CREATE OR REPLACE PROCEDURE sp_finalizar_ordem_servico(
     p_os_id INT,
     p_data_vencimento DATE DEFAULT NULL
@@ -335,7 +250,6 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     v_status VARCHAR(20);
-    v_item RECORD;
     v_pecas NUMERIC;
     v_mao_obra NUMERIC;
     v_vencimento DATE;
@@ -348,34 +262,7 @@ BEGIN
         RAISE EXCEPTION 'OS % esta com status % e nao pode ser finalizada', p_os_id, v_status;
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM ordens_servico_pecas WHERE ordem_servico_id = p_os_id)
-       AND NOT EXISTS (SELECT 1 FROM ordens_servico_servicos WHERE ordem_servico_id = p_os_id) THEN
-        RAISE EXCEPTION 'OS % nao tem pecas nem servicos', p_os_id;
-    END IF;
-
-    -- se nao informar vencimento, 7 dias
     v_vencimento := COALESCE(p_data_vencimento, CURRENT_DATE + 7);
-
-    -- baixa no estoque (tira do saldo e da reserva) e registra a saida
-    FOR v_item IN SELECT peca_id, quantidade FROM ordens_servico_pecas WHERE ordem_servico_id = p_os_id
-    LOOP
-        UPDATE estoques
-        SET quantidade_atual = quantidade_atual - v_item.quantidade,
-            quantidade_reservada = quantidade_reservada - v_item.quantidade,
-            data_atualizacao = CURRENT_DATE
-        WHERE peca_id = v_item.peca_id
-          AND quantidade_atual >= v_item.quantidade
-          AND quantidade_reservada >= v_item.quantidade;
-
-        IF NOT FOUND THEN
-            RAISE EXCEPTION 'Problema no estoque/reserva da peca % (OS %)', v_item.peca_id, p_os_id;
-        END IF;
-
-        INSERT INTO movimentacoes_estoque (id, peca_id, tipo_movimentacao, quantidade, data_movimentacao, observacao)
-        SELECT COALESCE(MAX(id), 0) + 1, v_item.peca_id, 'SAIDA', v_item.quantidade,
-               CURRENT_TIMESTAMP, 'Uso na ordem de servico ' || p_os_id
-        FROM movimentacoes_estoque;
-    END LOOP;
 
     SELECT COALESCE(SUM(quantidade * preco_unitario), 0) INTO v_pecas
     FROM ordens_servico_pecas WHERE ordem_servico_id = p_os_id;
@@ -391,21 +278,12 @@ BEGIN
         valor_total = v_pecas + v_mao_obra
     WHERE id = p_os_id;
 
-    -- cobranca
     INSERT INTO cobrancas (id, ordem_servico_id, valor, data_emissao, data_vencimento, status)
     SELECT COALESCE(MAX(id), 0) + 1, p_os_id, v_pecas + v_mao_obra, CURRENT_DATE, v_vencimento, 'PENDENTE'
     FROM cobrancas;
 END;
 $$;
 
-
--- 4. sp_registrar_pagamento_os
--- regras de juros e desconto:
---   Dinheiro e Pix: 5% de desconto
---   Cartao de Credito: ate 12x, juros de 2% por parcela alem da primeira
---   outras formas: so 1 parcela
---   pagamento atrasado: multa de 2% + 0,033% por dia
--- valor pago = valor da cobranca - desconto + juros
 CREATE OR REPLACE PROCEDURE sp_registrar_pagamento_os(
     p_os_id INT,
     p_forma_pagamento_id INT,
@@ -447,7 +325,6 @@ BEGIN
         RAISE EXCEPTION '% aceita apenas 1 parcela', v_forma;
     END IF;
 
-    -- pega a cobranca pendente (as OS antigas CONCLUIDA nao tem, entao cria uma)
     SELECT id, valor, data_vencimento INTO v_cobranca_id, v_valor, v_vencimento
     FROM cobrancas
     WHERE ordem_servico_id = p_os_id AND status = 'PENDENTE';
@@ -460,7 +337,6 @@ BEGIN
         VALUES (v_cobranca_id, p_os_id, v_valor, CURRENT_DATE, v_vencimento, 'PENDENTE');
     END IF;
 
-    -- desconto
     IF v_forma IN ('Dinheiro', 'Pix') THEN
         v_desconto := ROUND(v_valor * 0.05, 2);
     END IF;
@@ -469,12 +345,10 @@ BEGIN
     END IF;
     v_desconto := v_desconto + p_desconto_extra;
 
-    -- juros do parcelamento
     IF v_forma = 'Cartão de Crédito' AND p_parcelas > 1 THEN
         v_juros := ROUND(v_valor * 0.02 * (p_parcelas - 1), 2);
     END IF;
 
-    -- multa por atraso
     v_atraso := CURRENT_DATE - v_vencimento;
     IF v_atraso > 0 THEN
         v_juros := v_juros + ROUND(v_valor * (0.02 + 0.00033 * v_atraso), 2);
@@ -490,11 +364,6 @@ BEGIN
 END;
 $$;
 
-
--- 5. sp_dar_entrada_estoque_fornecedor
--- registra a nota do fornecedor. Os itens vao em JSON, exemplo:
--- '[{"peca_id":3,"quantidade":10,"preco_custo":47.50}]'
--- soma no estoque, atualiza o preco de custo e grava a movimentacao de ENTRADA
 CREATE OR REPLACE PROCEDURE sp_dar_entrada_estoque_fornecedor(
     p_fornecedor_id INT,
     p_numero_nota VARCHAR,
@@ -542,7 +411,6 @@ BEGIN
             data_atualizacao = CURRENT_DATE
         WHERE peca_id = v_peca_id;
 
-        -- se a peca ainda nao tem estoque cadastrado
         IF NOT FOUND THEN
             INSERT INTO estoques (id, peca_id, quantidade_atual, quantidade_minima, data_atualizacao)
             SELECT COALESCE(MAX(id), 0) + 1, v_peca_id, v_qtd, 0, CURRENT_DATE FROM estoques;
@@ -551,27 +419,10 @@ BEGIN
         UPDATE pecas SET preco_custo = v_custo WHERE id = v_peca_id;
 
         INSERT INTO movimentacoes_estoque (id, peca_id, tipo_movimentacao, quantidade, data_movimentacao,
-                                           observacao, fornecedor_id, nota_fiscal, preco_unitario)
+                                         observacao, fornecedor_id, nota_fiscal, preco_unitario)
         SELECT COALESCE(MAX(id), 0) + 1, v_peca_id, 'ENTRADA', v_qtd, CURRENT_TIMESTAMP,
                'NF ' || p_numero_nota || ' - ' || v_razao, p_fornecedor_id, p_numero_nota, v_custo
         FROM movimentacoes_estoque;
     END LOOP;
 END;
 $$;
-
-
--- ============================================================================
--- 3. TESTES (tirar o -- para rodar)
--- ============================================================================
-
--- SELECT fc_calcular_valor_total_os(2);
--- SELECT fc_total_gasto_cliente(1);
--- SELECT fc_verificar_peca_estoque_critico(3);
--- SELECT * FROM fc_produtividade_mensal_mecanico(1, 10, 2026);
--- SELECT fc_faturamento_por_categoria_servico('Freios', '2026-01-01', '2026-12-31');
-
--- CALL sp_abrir_ordem_servico(2, 2, 1, 2, 'Barulho ao frear', NULL, NULL);
--- CALL sp_adicionar_peca_ordem_servico(5, 1, 4);
--- CALL sp_finalizar_ordem_servico(5);
--- CALL sp_registrar_pagamento_os(5, 2);
--- CALL sp_dar_entrada_estoque_fornecedor(2, 'NF-1001', '[{"peca_id":3,"quantidade":10,"preco_custo":47.50}]'::JSONB);
