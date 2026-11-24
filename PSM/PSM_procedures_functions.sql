@@ -179,9 +179,9 @@ BEGIN
     SELECT COALESCE(MAX(id), 0) + 1 INTO p_os_id FROM ordens_servico;
 
     INSERT INTO ordens_servico (id, cliente_id, veiculo_id, funcionario_id, atendente_id,
-                                data_abertura, data_previsao, status, valor_total, observacoes)
+                                data_abertura, data_previsao, status, valor_pecas, valor_mao_obra, valor_total, observacoes)
     VALUES (p_os_id, p_cliente_id, p_veiculo_id, p_mecanico_id, p_atendente_id,
-            CURRENT_TIMESTAMP, p_data_previsao, 'EM_ANALISE', 0, p_observacoes);
+            CURRENT_TIMESTAMP, p_data_previsao, 'EM_ANALISE', 0, 0, 0, p_observacoes);
 END;
 $$;
 
